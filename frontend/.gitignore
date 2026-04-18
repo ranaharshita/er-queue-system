@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.env
+
+# Database credentials
+db.py
+
+# VS Code
+.vscode/
+
+# Node modules
+node_modules/

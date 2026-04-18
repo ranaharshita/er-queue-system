@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ER Queue - Register Patient</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <h1>🏥 Emergency Room Queue</h1>
+        <a href="dashboard.html">View Dashboard →</a>
+    </nav>
+
+    <!-- REGISTRATION FORM -->
+    <div class="container">
+        <h2>Register New Patient</h2>
+<p class="subtitle">Fill in patient details to add them to the emergency queue</p>
+
+        <div class="form-group">
+            <label>Patient Name</label>
+            <input 
+                type="text" 
+                id="name" 
+                placeholder="Enter full name"
+            >
+        </div>
+
+        <div class="form-group">
+            <label>Age</label>
+            <input 
+                type="number" 
+                id="age" 
+                placeholder="Enter age"
+                min="0" max="120"
+            >
+        </div>
+
+        <div class="form-group">
+            <label>Severity Level</label>
+            <select id="severity">
+                <option value="">-- Select Severity --</option>
+                <option value="Critical">🔴 Critical</option>
+                <option value="Moderate">🟠 Moderate</option>
+                <option value="Mild">🟢 Mild</option>
+            </select>
+        </div>
+
+        <button class="btn" onclick="addPatient()">
+            Add to Queue
+        </button>
+
+        <!-- Success / Error message -->
+        <div class="message" id="message"></div>
+    </div>
+
+    <script>
+        async function addPatient() {
+            // Step 1: Get values from form
+            const name     = document.getElementById("name").value.trim()
+            const age      = document.getElementById("age").value.trim()
+            const severity = document.getElementById("severity").value
+            const msgBox   = document.getElementById("message")
+
+            // Step 2: Basic validation
+            if (!name || !age || !severity) {
+                msgBox.textContent    = "Please fill all fields!"
+                msgBox.className      = "message error"
+                msgBox.style.display  = "block"
+                return
+            }
+
+            // Step 3: Send data to Flask backend
+            try {
+                const response = await fetch("http://127.0.0.1:5000/add", {
+                    method : "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body   : JSON.stringify({ name, age, severity })
+                })
+
+                const data = await response.json()
+
+                // Step 4: Show success message
+                msgBox.textContent   = `✅ ${data.patient.name} added to queue!`
+                msgBox.className     = "message success"
+                msgBox.style.display = "block"
+
+                // Step 5: Clear the form
+                document.getElementById("name").value     = ""
+                document.getElementById("age").value      = ""
+                document.getElementById("severity").value = ""
+
+            } catch (error) {
+                msgBox.textContent   = "❌ Could not connect to server!"
+                msgBox.className     = "message error"
+                msgBox.style.display = "block"
+            }
+        }
+    </script>
+
+</body>
+</html>

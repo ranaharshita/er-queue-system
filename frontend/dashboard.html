@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ER Queue - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <h1>🏥 Emergency Room Dashboard</h1>
+        <a href="index.html">← Register Patient</a>
+    </nav>
+
+    <div class="dashboard-container">
+
+        <!-- STATS ROW -->
+<div class="stats-row">
+    <div class="stat-card critical">
+        <div class="number" id="countCritical">0</div>
+        <div class="label">🔴 Critical</div>
+    </div>
+    <div class="stat-card moderate">
+        <div class="number" id="countModerate">0</div>
+        <div class="label">🟠 Moderate</div>
+    </div>
+    <div class="stat-card mild">
+        <div class="number" id="countMild">0</div>
+        <div class="label">🟢 Mild</div>
+    </div>
+    <div class="stat-card total">
+        <div class="number" id="countTotal">0</div>
+        <div class="label">👥 Total Waiting</div>
+    </div>
+</div>
+
+        <!-- NEXT PATIENT CARD (hidden until clicked) -->
+        <div class="next-card" id="nextCard">
+            <h3>🚨 Next Patient to Treat:</h3>
+            <p id="nextName"></p>
+            <p id="nextAge"></p>
+            <p id="nextSeverity"></p>
+            <p id="nextArrival"></p>
+        </div>
+
+        <!-- ACTION BUTTONS -->
+        <div class="dashboard-buttons">
+            <button class="btn-refresh" onclick="loadQueue()">
+                🔄 Refresh
+            </button>
+            <button class="btn-next" onclick="getNextPatient()">
+                👁️ Next Patient
+            </button>
+            <button class="btn-treat" onclick="treatPatient()">
+                ✅ Treat Patient
+            </button>
+        </div>
+
+        <!-- STATUS MESSAGE -->
+        <div class="message" id="message"></div>
+
+        <!-- QUEUE TABLE -->
+        <h2>Current Queue</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Age</th>
+                    <th>Severity</th>
+                    <th>Arrival Time</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="queueBody">
+                <!-- Patients will be loaded here by JavaScript -->
+            </tbody>
+        </table>
+
+        <div class="empty-state" id="emptyMsg" style="display:none;">
+    <div class="icon">🏥</div>
+    <p>No patients in queue right now.</p>
+</div>
+
+    </div>
+
+    <script>
+        // ─────────────────────────────────────
+        // Load queue from backend on page open
+        // ─────────────────────────────────────
+       window.onload = function() {
+    loadQueue()
+
+    // ─────────────────────────────────────
+    // Auto-run priority aging every 30 secs
+    // ─────────────────────────────────────
+    setInterval(async function() {
+        try {
+            const response = await fetch("http://127.0.0.1:5000/aging", {
+                method : "POST",
+                headers: { "Content-Type": "application/json" },
+                body   : JSON.stringify({})
+            })
+
+            const data = await response.json()
+
+            // If anyone got upgraded, show alert + refresh
+            if (data.upgraded.length > 0) {
+                data.upgraded.forEach(p => {
+                    showMessage(
+                        `⚠️ ${p.name} upgraded: ${p.old_severity} → ${p.new_severity} (waited ${p.waited_mins} mins)`,
+                        "error"
+                    )
+                })
+
+                // Reload queue to show new order
+                loadQueue()
+            }
+
+        } catch (error) {
+            console.log("Aging check failed:", error)
+        }
+
+    }, 80000) // runs every 30 seconds
+}
+        // ─────────────────────────────────────
+        // LOAD QUEUE — fetch all waiting patients
+        // sorted by priority (heap order)
+        // ─────────────────────────────────────
+        async function loadQueue() {
+            const tbody    = document.getElementById("queueBody")
+            const emptyMsg = document.getElementById("emptyMsg")
+
+            try {
+                const response = await fetch("http://127.0.0.1:5000/queue")
+                const patients = await response.json()
+
+                // Clear existing rows
+                tbody.innerHTML = ""
+
+                // Update stat cards
+const critical = patients.filter(p => p.severity === "Critical").length
+const moderate = patients.filter(p => p.severity === "Moderate").length
+const mild     = patients.filter(p => p.severity === "Mild").length
+
+document.getElementById("countCritical").textContent = critical
+document.getElementById("countModerate").textContent = moderate
+document.getElementById("countMild").textContent     = mild
+document.getElementById("countTotal").textContent    = patients.length
+
+                if (patients.length === 0) {
+                    emptyMsg.style.display = "block"
+                    return
+                }
+
+                emptyMsg.style.display = "none"
+
+                // Build table rows
+                patients.forEach((patient, index) => {
+
+                    // Pick badge color based on severity
+                    let badgeClass = ""
+                    if      (patient.severity === "Critical") badgeClass = "badge-critical"
+                    else if (patient.severity === "Moderate") badgeClass = "badge-moderate"
+                    else                                      badgeClass = "badge-mild"
+
+                    // Highlight top priority patient in first row
+                    const rowClass = index === 0 ? "top-patient" : ""
+
+                    tbody.innerHTML += `
+                        <tr class="${rowClass}">
+                            <td>${index + 1}</td>
+                            <td>${patient.name}</td>
+                            <td>${patient.age}</td>
+                            <td>
+                                <span class="badge ${badgeClass}">
+                                    ${patient.severity}
+                                </span>
+                            </td>
+                            <td>${patient.arrival_time}</td>
+                            <td>⏳ Waiting</td>
+                        </tr>
+                    `
+                })
+
+            } catch (error) {
+                showMessage("❌ Could not connect to server!", "error")
+            }
+        }
+
+        // ─────────────────────────────────────
+        // NEXT PATIENT — peek at top of heap
+        // without removing
+        // ─────────────────────────────────────
+        async function getNextPatient() {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/next")
+
+                if (response.status === 404) {
+                    showMessage("No patients in queue!", "error")
+                    document.getElementById("nextCard").style.display = "none"
+                    return
+                }
+
+                const patient  = await response.json()
+                const nextCard = document.getElementById("nextCard")
+
+                // Fill the card
+                document.getElementById("nextName").textContent    
+                    = `👤 Name     : ${patient.name}`
+                document.getElementById("nextAge").textContent     
+                    = `🎂 Age      : ${patient.age}`
+                document.getElementById("nextSeverity").textContent
+                    = `🚨 Severity : ${patient.severity}`
+                document.getElementById("nextArrival").textContent 
+                    = `🕐 Arrived  : ${patient.arrival_time}`
+
+                // Show the card
+                nextCard.style.display = "block"
+
+            } catch (error) {
+                showMessage("❌ Could not connect to server!", "error")
+            }
+        }
+
+        // ─────────────────────────────────────
+        // TREAT PATIENT — remove top of heap
+        // update MySQL status to Treated
+        // ─────────────────────────────────────
+        async function treatPatient() {
+            try {
+                const response = await fetch("http://127.0.0.1:5000/treat", {
+                    method : "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body   : JSON.stringify({})
+                })
+
+                if (response.status === 404) {
+                    showMessage("No patients to treat!", "error")
+                    return
+                }
+
+                const data = await response.json()
+
+                // Show success message
+                showMessage(`✅ ${data.message}`, "success")
+
+                // Hide next patient card
+                document.getElementById("nextCard").style.display = "none"
+
+                // Reload the queue
+                loadQueue()
+
+            } catch (error) {
+                showMessage("❌ Could not connect to server!", "error")
+            }
+        }
+
+        // ─────────────────────────────────────
+        // HELPER — show status messages
+        // ─────────────────────────────────────
+        function showMessage(text, type) {
+            const msgBox         = document.getElementById("message")
+            msgBox.textContent   = text
+            msgBox.className     = `message ${type}`
+            msgBox.style.display = "block"
+
+            // Auto hide after 3 seconds
+            setTimeout(() => {
+                msgBox.style.display = "none"
+            }, 3000)
+        }
+    </script>
+
+</body>
+</html>
