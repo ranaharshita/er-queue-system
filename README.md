@@ -14,6 +14,8 @@ endangering lives. Additionally, mild patients can wait indefinitely
 as more critical cases keep arriving — a problem known as 
 **Patient Starvation**.
 
+![Dashboard](dashboard.png)
+
 ---
 
 ## ✅ Our Solution
